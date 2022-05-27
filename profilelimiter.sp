@@ -41,6 +41,7 @@ public void OnPluginStart(){
 	if (db == null){
 		SetFailState("Database connect failed. %s", error);
 	}
+	db.SetCharset("utf8mb4");
 	
 	char dbtype[2], query[512];
 	db.Driver.GetIdentifier(dbtype, sizeof(dbtype));
@@ -59,11 +60,11 @@ public void OnClientPostAdminCheck(int client){
 }
 
 public void SQL_CheckClient(Database l_db, DBResultSet results, const char[] error, int client){
-	if (error[0]){
-		LogError(error);
+	if (results.FetchRow()){
+		LogMessage("player %N in whilelist", client);
 		return;
 	}
-	if (results.FetchRow()){} else CheckTime(client);
+	CheckTime(client);
 }
 
 public void SQL_CheckErrors(Database l_db, DBResultSet results, const char[] error, any data){
