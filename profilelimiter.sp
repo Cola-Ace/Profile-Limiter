@@ -10,14 +10,13 @@ Database db = null;
 
 ConVar g_cDatabase, g_cTime, g_cToken, g_cMessage;
 
+bool g_bIsSQLite = false;
+
 #define SQL_CreateTable \
 "CREATE TABLE IF NOT EXISTS `profilelimiter_whilelist` \
 (\
-	`auth` varchar(32) CHARACTER SET utf8mb4 COLLATE utf8mb4_general_ci NOT NULL PRIMARY KEY, \
+	`auth` varchar(32) %s PRIMARY KEY \
 );"
-
-#define SQL_Query \
-"SELECT * FROM profilelimiter_whilelist WHERE auth=`%s`"
 
 public Plugin myinfo = {
 	name = "Profile Limiter",
@@ -40,24 +39,31 @@ public void OnPluginStart(){
 	g_cDatabase.GetString(dbname, sizeof(dbname));
 	db = SQL_Connect(dbname, true, error, sizeof(error));
 	if (db == null){
-		SetFailState("database connect failed. %s", error);
+		SetFailState("Database connect failed. %s", error);
 	}
 	
-	db.Query(SQL_CheckErrors, SQL_CreateTable);
+	char dbtype[2], query[512];
+	db.Driver.GetIdentifier(dbtype, sizeof(dbtype));
+	g_bIsSQLite = dbtype[0] == 's';
+	FormatEx(query, sizeof(query), SQL_CreateTable, g_bIsSQLite ? "":"COLLATE 'utf8mb4_general_ci'");
+	
+	db.Query(SQL_CheckErrors, query);
 }
 
-public void OnClientPutInServer(int client){
+public void OnClientPostAdminCheck(int client){
 	if (!IsPlayer(client)) return;
 	char auth[32], query[256];
 	GetClientAuthId(client, AuthId_Steam2, auth, sizeof(auth));
-	Format(query, sizeof(query), SQL_Query, auth);
+	FormatEx(query, sizeof(query), "SELECT * FROM profilelimiter_whilelist WHERE auth='%s'", auth);
 	db.Query(SQL_CheckClient, query, client);
 }
 
 public void SQL_CheckClient(Database l_db, DBResultSet results, const char[] error, int client){
-	if (!results.FetchRow()){
-		CheckTime(client);
+	if (error[0]){
+		LogError(error);
+		return;
 	}
+	if (results.FetchRow()){} else CheckTime(client);
 }
 
 public void SQL_CheckErrors(Database l_db, DBResultSet results, const char[] error, any data){
@@ -85,6 +91,7 @@ public int HttpResponseCallback(bool success, const char[] error, System2HTTPReq
 	if (!success || response.StatusCode != 200 || !IsPlayer(client))
 	{
 		LogError("Request Error, Code:%i", response.StatusCode);
+		KickClient(client, "游戏时长请求失败");
 		return;
 	}
 
